@@ -49,7 +49,7 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
     /**
     Emitted when user bought ACDM tokens
     @param user User address
-    @param referrer Amount of tokens bought
+    @param amount Amount of tokens bought
     */
     event BoughtACDM(address user, uint256 amount);
 
