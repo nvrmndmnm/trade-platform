@@ -6,6 +6,10 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+/**
+@title Platform for selling and trading tokens
+@author Seydou Obedias
+*/
 contract ACDMPlatform is ReentrancyGuard, Ownable {
     using Counters for Counters.Counter;
     Counters.Counter private _orderIds;
@@ -32,17 +36,62 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
         Trade
     }
 
-    event Register(address user, address referrer);
-    event BoughtACDM(address user, uint256 amount);
-    event SaleRoundStarted(uint256 timestamp);
-    event TradeRoundStarted(uint256 timestamp);
-    event OrderAdded(uint256 idOrder, uint256 amountACDM, uint256 amountETH);
-    event OrderRemoved(uint256 idOrder);
-    event OrderRedeemed(address buyer, uint256 idOrder, uint256 amountACDM);
-
     mapping(address => address) referrers;
     mapping(uint256 => Order) public orders;
 
+    /**
+    Emitted when new user is registered
+    @param user Registered user address
+    @param referrer Referrer address
+    */
+    event Register(address user, address referrer);
+
+    /**
+    Emitted when user bought ACDM tokens
+    @param user User address
+    @param referrer Amount of tokens bought
+    */
+    event BoughtACDM(address user, uint256 amount);
+
+    /**
+    Emitted when new sale round started
+    @param timestamp Start time 
+    */
+    event SaleRoundStarted(uint256 timestamp);
+
+    /**
+    Emitted when new trade round started
+    @param timestamp Start time 
+    */
+    event TradeRoundStarted(uint256 timestamp);
+
+    /**
+    Emitted when new order added
+    @param idOrder Order ID
+    @param amountACDM Amount of ACDM tokens in order
+    @param amountETH Amount of ETH in order 
+    */
+    event OrderAdded(uint256 idOrder, uint256 amountACDM, uint256 amountETH);
+
+    /**
+    Emitted when order removed
+    @param idOrder Order ID 
+    */
+    event OrderRemoved(uint256 idOrder);
+
+    /**
+    Emitted when order redeemed
+    @param buyer Buyer address
+    @param idOrder Order ID
+    @param amountACDM Amount of redeemed ACDM tokens
+    */
+    event OrderRedeemed(address buyer, uint256 idOrder, uint256 amountACDM);
+
+    /**
+    Constructor
+    @param _token ACDM token address
+    @param _roundTime Round duration in seconds 
+    */
     constructor(IACDMToken _token, uint256 _roundTime) {
         token = _token;
         roundType = Round.Sale;
@@ -53,6 +102,10 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
         tokenPrice = tradeETHVolume / tradeACDMVolume;
     }
 
+    /**
+    Registers new users in referral program
+    @param _referrer Referrer address
+    */
     function register(address _referrer) public {
         require(
             referrers[msg.sender] == address(0),
@@ -63,6 +116,11 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
         emit Register(msg.sender, _referrer);
     }
 
+    /**
+    Sends earned ETH to referrals
+    @param commissionValFirst Referral program first level commission value
+    @param commissionValSecond Referral program second level commission value
+    */
     function _payReferral(
         uint256 commissionValFirst,
         uint256 commissionValSecond
@@ -75,6 +133,10 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
         }
     }
 
+    /**
+    Purchases ACDM tokens from platform during sale round
+    @param _amount Amount of tokens to buy
+    */
     function buyACDM(uint256 _amount) public payable nonReentrant {
         require(
             roundType == Round.Sale,
@@ -94,6 +156,10 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
         emit BoughtACDM(msg.sender, _amount);
     }
 
+    /**
+    Starts sale round after trade round end
+    @notice Any user can call this function
+    */
     function startSaleRound() public {
         require(roundType != Round.Sale, "Sale round is already active");
         require(
@@ -120,6 +186,10 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
         emit SaleRoundStarted(block.timestamp);
     }
 
+    /**
+    Starts trade round after sale round end
+    @notice Any user can call this function
+    */
     function startTradeRound() public {
         require(roundType != Round.Trade, "Trade round is already active");
         require(
@@ -132,6 +202,11 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
         emit TradeRoundStarted(block.timestamp);
     }
 
+    /**
+    Adds new order to sell ACDM tokens during trade round
+    @param _amountACDM Amount of ACDM tokens to sell
+    @param _amountETH Amouth of ETH to receive
+    */
     function addOrder(uint256 _amountACDM, uint256 _amountETH) public {
         require(roundType == Round.Trade, "Wait until sale round is over");
         require(
@@ -147,6 +222,11 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
         emit OrderAdded(idOrder, _amountACDM, _amountETH);
     }
 
+    /**
+    Removes existing order
+    @param _idOrder Order ID
+    @notice Only order seller can remove it
+    */
     function removeOrder(uint256 _idOrder) public {
         require(
             orders[_idOrder].seller == msg.sender,
@@ -159,6 +239,11 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
         emit OrderRemoved(_idOrder);
     }
 
+    /**
+    Redeems existing order for ETH
+    @param _amount Amount of tokens to redeem
+    @param _idOrder Order ID
+    */
     function redeemOrder(uint256 _amount, uint256 _idOrder)
         public
         payable
@@ -189,12 +274,24 @@ contract ACDMPlatform is ReentrancyGuard, Ownable {
         emit OrderRedeemed(msg.sender, _idOrder, _amount);
     }
 
+    /**
+    Safely sends ETH
+    @param _to Recipient address
+    @param _amount Amount of ETH to send
+    @return Transaction result
+    */
     function _sendETH(address _to, uint256 _amount) private returns (bool) {
         (bool sent, ) = _to.call{value: _amount}("");
         require(sent, "Could not send ETH");
         return sent;
     }
 
+    /**
+    Withdraws ETH received durin sale round
+    @param _to Recipient address
+    @param _amount Amount of ETH to send
+    @notice Only owner can withdraw
+    */
     function withdrawETH(address payable _to, uint256 _amount)
         public
         payable
